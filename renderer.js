@@ -98,11 +98,88 @@ function syncVolume(data) {
   if (localMode) audio.volume = pct / 100;
 }
 
+let seeking = false;
+let seekHoldUntil = 0;
+
 function updateProgressUi(pos, dur) {
+  if (seeking) return;
   const pct = dur > 0 ? Math.min(100, (pos / dur) * 100) : 0;
   fill.style.width = pct + '%';
   progress.setAttribute('aria-valuenow', String(Math.round(pct)));
 }
+
+function currentDuration() {
+  return localMode ? audio.duration || externalDuration || 0 : externalDuration;
+}
+
+function seekRatio(e) {
+  const rect = progress.getBoundingClientRect();
+  if (rect.width <= 0) return 0;
+  return Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+}
+
+function paintSeek(ratio) {
+  fill.style.width = ratio * 100 + '%';
+  progress.setAttribute('aria-valuenow', String(Math.round(ratio * 100)));
+}
+
+function commitSeek(ratio) {
+  const dur = currentDuration();
+  if (!(dur > 0)) return;
+  const t = Math.max(0, Math.min(dur, ratio * dur));
+  if (localMode) {
+    audio.currentTime = t;
+    window.music.localProgress({ position: t });
+  } else {
+    externalPosition = t;
+    externalUpdatedAt = performance.now();
+    seekHoldUntil = performance.now() + 1500;
+    window.music.control('seek:' + t.toFixed(2));
+  }
+}
+
+progress.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0 || !(currentDuration() > 0)) return;
+  e.stopPropagation();
+  seeking = true;
+  progress.classList.add('seeking');
+  progress.setPointerCapture(e.pointerId);
+  paintSeek(seekRatio(e));
+});
+progress.addEventListener('pointermove', (e) => {
+  if (!seeking) return;
+  e.stopPropagation();
+  paintSeek(seekRatio(e));
+});
+function endSeek(e, commit) {
+  if (!seeking) return;
+  seeking = false;
+  progress.classList.remove('seeking');
+  try {
+    progress.releasePointerCapture(e.pointerId);
+  } catch {
+    /* ignore */
+  }
+  if (commit) commitSeek(seekRatio(e));
+}
+progress.addEventListener('pointerup', (e) => {
+  e.stopPropagation();
+  endSeek(e, true);
+});
+progress.addEventListener('pointercancel', (e) => endSeek(e, false));
+progress.addEventListener('keydown', (e) => {
+  const dur = currentDuration();
+  if (!(dur > 0)) return;
+  const cur = localMode
+    ? audio.currentTime
+    : externalPosition + (externalPlaying ? (performance.now() - externalUpdatedAt) / 1000 : 0);
+  let next = null;
+  if (e.key === 'ArrowRight') next = cur + 5;
+  else if (e.key === 'ArrowLeft') next = cur - 5;
+  if (next === null) return;
+  e.preventDefault();
+  commitSeek(Math.max(0, Math.min(1, next / dur)));
+});
 
 setInterval(() => {
   if (localMode || !externalPlaying || externalDuration <= 0) return;
@@ -125,6 +202,7 @@ function songFrom(data) {
     coverUrl: data.coverUrl || '',
     thumbnail: data.thumbnail || '',
     thumbMime: data.thumbMime || '',
+    duration: data.duration > 0 ? data.duration : 0,
   };
 }
 
@@ -135,6 +213,7 @@ function setLiked(on) {
 }
 
 function applyTrack(data) {
+  const prevSong = currentSong;
   currentSong = songFrom(data);
   setLiked(!!(data && data.liked));
   if (!data || data.idle) {
@@ -186,14 +265,20 @@ function applyTrack(data) {
 
   const nextTitle = data.title || 'Desconhecido';
   const nextArtist = data.artist || data.album || '';
-  if (titleEl.textContent !== nextTitle) titleEl.textContent = nextTitle;
-  if (artistEl.textContent !== nextArtist) artistEl.textContent = nextArtist;
+  titleEl.textContent = nextTitle;
+  artistEl.textContent = nextArtist;
 
   const playing = String(data.status || '').toLowerCase() === 'playing';
-  externalPosition = Math.max(0, data.position || 0);
+  const incomingPos = Math.max(0, data.position || 0);
   externalDuration = data.duration > 0 ? data.duration : 0;
   externalPlaying = playing;
-  externalUpdatedAt = performance.now();
+  // Right after a seek, ignore stale positions until the player catches up.
+  const holdSeek =
+    performance.now() < seekHoldUntil && Math.abs(incomingPos - externalPosition) > 2;
+  if (!holdSeek) {
+    externalPosition = incomingPos;
+    externalUpdatedAt = performance.now();
+  }
   updateProgressUi(externalPosition, externalDuration);
   btnPlay.innerHTML = playing ? PAUSE_SVG : PLAY_SVG;
   btnPlay.setAttribute('aria-label', playing ? 'Pausar' : 'Tocar');
@@ -201,7 +286,17 @@ function applyTrack(data) {
   setSkip(btnPrev, spotify || data.canPrev !== false);
   setSkip(btnNext, spotify || data.canNext !== false);
   syncVolume(data);
-  setCover(data);
+  const trackChanged =
+    !prevSong ||
+    prevSong.title !== (data.title || '') ||
+    prevSong.artist !== (data.artist || '') ||
+    Math.round(prevSong.duration || 0) !==
+      Math.round(data.duration > 0 ? data.duration : 0);
+  if (data.coverDataUrl || data.coverUrl || data.thumbnail) {
+    setCover(data);
+  } else if (trackChanged) {
+    setCover({});
+  }
 }
 
 audio.addEventListener('timeupdate', () => {
@@ -294,7 +389,7 @@ bubble.addEventListener('contextmenu', (e) => {
 
 bubble.addEventListener('pointerdown', (e) => {
   if (locked || e.button !== 0) return;
-  if (e.target.closest('button, a, input, #cover, #title')) return;
+  if (e.target.closest('button, a, input, #cover, #title, #progress')) return;
   dragging = true;
   bubble.setPointerCapture(e.pointerId);
   window.music.dragStart();

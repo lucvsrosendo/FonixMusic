@@ -457,6 +457,13 @@ function wireIpc() {
       media.control(cmd);
       return;
     }
+    if (typeof cmd === 'string' && cmd.startsWith('seek:')) {
+      const sec = Number(cmd.slice(5));
+      if (!Number.isFinite(sec)) return;
+      if (localPlayer.active) localPlayer.setPosition(sec);
+      else media.control('seek:' + sec.toFixed(2));
+      return;
+    }
     if (localPlayer.active) localPlayer.control(cmd);
     else media.control(cmd);
   });
@@ -554,11 +561,21 @@ app.whenReady().then(() => {
   createTray();
   let mediaSeq = 0;
   media.on('update', async (data) => {
-    const externalPlaying = data && !data.idle && String(data.status || '').toLowerCase() === 'playing';
-    if (localPlayer.active && !externalPlaying) return;
+    const externalActive =
+      data &&
+      !data.idle &&
+      /^(playing|paused)$/i.test(String(data.status || ''));
+    const externalPlaying =
+      data && !data.idle && String(data.status || '').toLowerCase() === 'playing';
+    // Only suppress SMTC while local is active AND there is no external session to show.
+    if (localPlayer.active && !externalActive) return;
     if (localPlayer.active && externalPlaying) {
       localPlayer.active = false;
       localPlayer.status = 'Paused';
+    }
+    if (data && data.idle) {
+      sendTrack(data);
+      return;
     }
     const seq = ++mediaSeq;
     const shown = stampTrack(data);
@@ -570,8 +587,9 @@ app.whenReady().then(() => {
     } catch {
       enriched = data;
     }
-    if (seq !== mediaSeq || localPlayer.active) return;
-    if (!enriched.thumbnail && data.thumbnail) {
+    if (seq !== mediaSeq) return;
+    if (localPlayer.active && !externalPlaying) return;
+    if (!enriched.coverUrl && !enriched.thumbnail && data.thumbnail) {
       enriched.thumbnail = data.thumbnail;
       enriched.thumbMime = data.thumbMime;
     }
