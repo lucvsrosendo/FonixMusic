@@ -1,0 +1,71 @@
+{
+  "name": "fonix-music",
+  "productName": "Fonix Music",
+  "version": "1.0.0",
+  "description": "Desktop music bubble widget for Windows",
+  "main": "main.js",
+  "author": "lucvsrosendo",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lucvsrosendo/FonixMusic.git"
+  },
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^34.0.0",
+    "electron-builder": "^26.0.12",
+    "png-to-ico": "^2.1.8"
+  },
+  "build": {
+    "appId": "com.fonix.music",
+    "productName": "Fonix Music",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer.js",
+      "media.js",
+      "enrich.js",
+      "local.js",
+      "settings.js",
+      "desktop.js",
+      "library.js",
+      "library.html",
+      "index.html",
+      "style.css",
+      "build/icon.ico",
+      "build/icon.png",
+      "README.md"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Fonix Music"
+    },
+    "portable": {
+      "artifactName": "FonixMusic.exe"
+    }
+  },
+  "dependencies": {
+    "music-metadata": "^11.16.1"
+  }
+}

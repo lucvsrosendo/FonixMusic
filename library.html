@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Fonix Music — Biblioteca</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", sans-serif;
+      background: #12141a;
+      color: #f4f4f5;
+    }
+    header {
+      display: flex;
+      gap: 8px;
+      padding: 12px;
+      position: sticky;
+      top: 0;
+      background: #12141a;
+    }
+    button.tab {
+      border: 0;
+      border-radius: 999px;
+      padding: 6px 12px;
+      background: #2a2e38;
+      color: #fff;
+      cursor: pointer;
+    }
+    button.tab.on { background: #fff; color: #111; }
+    ul { list-style: none; margin: 0; padding: 0 8px 16px; }
+    li {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      padding: 8px;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+    li:hover { background: #222633; }
+    img { width: 46px; height: 46px; border-radius: 6px; object-fit: cover; background: #2a2e38; }
+    .meta { min-width: 0; flex: 1; }
+    strong, span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    span { opacity: 0.65; font-size: 12px; }
+    .src { font-size: 11px; opacity: 0.5; }
+    .empty { padding: 24px; opacity: 0.6; }
+  </style>
+</head>
+<body>
+  <header>
+    <button class="tab" id="tab-liked" type="button">Curtidas</button>
+    <button class="tab on" id="tab-all" type="button">Todas</button>
+  </header>
+  <ul id="list"></ul>
+  <script>
+    let mode = 'all';
+    let songs = [];
+    const listEl = document.getElementById('list');
+
+    function draw() {
+      const liked = songs.filter((s) => s.liked);
+      document.getElementById('tab-liked').textContent = 'Curtidas (' + liked.length + ')';
+      document.getElementById('tab-all').textContent = 'Todas (' + songs.length + ')';
+      const rows = mode === 'liked' ? liked : songs;
+      listEl.innerHTML = '';
+      if (!rows.length) {
+        const li = document.createElement('li');
+        li.className = 'empty';
+        li.textContent = mode === 'liked'
+          ? 'Nenhuma curtida. As músicas tocadas ficam em Todas.'
+          : 'Toque uma música no YouTube, Spotify ou no PC.';
+        listEl.appendChild(li);
+        return;
+      }
+      for (const song of rows) {
+        const li = document.createElement('li');
+        li.innerHTML =
+          '<img alt="" />' +
+          '<div class="meta"><strong></strong><span></span></div>' +
+          '<div class="src"></div>';
+        li.querySelector('img').src = song.cover || '';
+        li.querySelector('strong').textContent = song.title;
+        li.querySelector('span').textContent = song.artist || song.album || '';
+        li.querySelector('.src').textContent =
+          song.source === 'spotify' ? 'Spotify' : song.source === 'local' ? 'PC' : 'YouTube';
+        li.addEventListener('click', () => window.music.openSong(song));
+        listEl.appendChild(li);
+      }
+    }
+
+    async function refresh() {
+      songs = await window.music.libraryList();
+      draw();
+    }
+
+    document.getElementById('tab-liked').onclick = () => {
+      mode = 'liked';
+      document.getElementById('tab-liked').classList.add('on');
+      document.getElementById('tab-all').classList.remove('on');
+      draw();
+    };
+    document.getElementById('tab-all').onclick = () => {
+      mode = 'all';
+      document.getElementById('tab-all').classList.add('on');
+      document.getElementById('tab-liked').classList.remove('on');
+      draw();
+    };
+    window.music.onLibrary(refresh);
+    refresh();
+  </script>
+</body>
+</html>
