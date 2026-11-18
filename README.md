@@ -2,7 +2,7 @@
 
 Widget de música para a área de trabalho do Windows. Mostra o que está tocando, controla a reprodução e guarda uma biblioteca local das faixas.
 
-![Fonix Music](build/icon.png)
+![Fonix Music](build/readme-banner.jpg)
 
 ## O que é
 
